@@ -1,0 +1,1934 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#000000" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="디지털 시계" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <title>상시 출력 디지털 시계 (PWA)</title>
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="apple-touch-icon" href="./icon-192.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png" />
+  <!-- Google Fonts for High-Legibility Digital Clock Typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@200;300;400;500;600;700;800;900&family=Chakra+Petch:wght@300;400;500;600;700&family=Inter:wght@200;300;400;500;600;700;800;900&family=JetBrains+Mono:wght@200;300;400;500;600;700;800&family=Nunito:wght@300;400;600;700;800;900&family=Orbitron:wght@400;500;600;700;800;900&family=Oswald:wght@200;300;400;500;600;700&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --clock-color: #00F0FF;
+      --clock-brightness: 1;
+      --bg-color: #000000;
+      --font-stack: 'Barlow Condensed', 'Arial Narrow', 'Roboto Condensed', 'Bahnschrift', 'DIN Condensed', sans-serif;
+      --clock-weight: 800;
+      --clock-stroke: 0.4px;
+
+      /* Per-Section Independent Typography Variables (Landscape Optimized Defaults) */
+      /* 1. Top Row (Date) */
+      --top-size: 16;          /* in cqh (stage height %) */
+      --top-tracking: 0.03em;  /* letter-spacing */
+      --top-scale-x: 0.95;     /* horizontal scale (장평) */
+
+      /* 2. Center Row (12h Time) */
+      --mid-size: 58;          /* in cqh (stage height %) */
+      --mid-tracking: -0.015em;
+      --mid-scale-x: 0.95;
+
+      /* 3. Bottom Row (Day & Weather/Temp) */
+      --bot-size: 18;          /* in cqh (stage height %) */
+      --bot-tracking: 0.02em;
+      --bot-scale-x: 0.95;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      background-color: var(--bg-color);
+      color: var(--clock-color);
+      font-family: var(--font-stack);
+      overflow: hidden;
+      overscroll-behavior: none;
+      touch-action: manipulation;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Viewport Wrapper (Supports 90deg forced landscape rotation if OS rotation is locked) */
+    .viewport-wrapper {
+      width: 100vw;
+      height: 100vh;
+      width: 100dvw;
+      height: 100dvh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+      container-type: size;
+    }
+
+    .viewport-wrapper.force-rotate-90 {
+      width: 100vh;
+      height: 100vw;
+      width: 100dvh;
+      height: 100dvw;
+      transform: rotate(90deg);
+      transform-origin: center center;
+    }
+
+    /* Main Clock Stage - Landscape First Architecture */
+    .clock-stage {
+      width: 100%;
+      height: 100%;
+      padding: 2.8cqh 4cqw;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      align-items: center;
+      opacity: var(--clock-brightness);
+      transition: color 0.2s ease, opacity 0.2s ease, transform 0.5s ease;
+      position: relative;
+      font-family: var(--font-stack);
+      font-weight: var(--clock-weight);
+      -webkit-text-stroke: var(--clock-stroke) var(--clock-color);
+      overflow: hidden;
+    }
+
+    /* Top Row: Numeric Year, Month, Day */
+    .top-date-row {
+      width: 100%;
+      flex: 0 0 auto;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      font-weight: var(--clock-weight);
+      font-size: calc(var(--top-size) * 1cqh);
+      letter-spacing: var(--top-tracking);
+      line-height: 0.92;
+      color: var(--clock-color);
+      transform: scaleX(var(--top-scale-x));
+      transform-origin: center top;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Center Row: 12-Hour Time Display */
+    .center-time-row {
+      width: 100%;
+      flex: 1 1 auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+
+    .time-wrapper {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 0.80;
+      font-weight: var(--clock-weight);
+      font-size: calc(var(--mid-size) * 1cqh);
+      letter-spacing: var(--mid-tracking);
+      color: var(--clock-color);
+      transform: scaleX(var(--mid-scale-x));
+      transform-origin: center center;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .time-digits {
+      display: inline-block;
+    }
+
+    /* Custom circular colon dots matching the reference clock */
+    .time-colon {
+      display: inline-flex;
+      flex-direction: column;
+      justify-content: space-between;
+      align-items: center;
+      height: 0.48em;
+      margin: 0 0.05em;
+      /* Counteract horizontal scale so colon dots remain perfectly round */
+      transform: translateY(-0.02em) scaleX(calc(1 / var(--mid-scale-x)));
+      transition: opacity 0.15s ease;
+    }
+
+    .time-colon.blink-hidden {
+      opacity: 0.15;
+    }
+
+    .colon-dot {
+      width: 0.125em;
+      height: 0.125em;
+      border-radius: 50%;
+      background-color: var(--clock-color);
+      box-shadow: 0 0 var(--clock-stroke) var(--clock-color);
+    }
+
+    .ampm-badge {
+      font-size: 0.20em;
+      font-weight: var(--clock-weight);
+      margin-left: 0.16em;
+      align-self: flex-end;
+      margin-bottom: 0.10em;
+      letter-spacing: 0.03em;
+      -webkit-text-stroke: 0px;
+    }
+
+    .ampm-badge.hidden {
+      display: none;
+    }
+
+    /* Bottom Row: Day of Week (Left) & Weather + Temp (Right) */
+    .bottom-info-row {
+      width: 100%;
+      flex: 0 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      font-weight: var(--clock-weight);
+      font-size: calc(var(--bot-size) * 1cqh);
+      line-height: 0.92;
+      padding: 0 0.5cqw;
+    }
+
+    .day-of-week {
+      color: var(--clock-color);
+      letter-spacing: var(--bot-tracking);
+      transform: scaleX(var(--bot-scale-x));
+      transform-origin: left bottom;
+      white-space: nowrap;
+    }
+
+    .weather-box {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.22em;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+
+    .weather-icon-wrap {
+      width: 1.18em;
+      height: 0.98em;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transform: translateY(0.04em);
+    }
+
+    .weather-icon-wrap svg {
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+
+    .temp-text {
+      color: var(--clock-color);
+      letter-spacing: var(--bot-tracking);
+      transform: scaleX(var(--bot-scale-x));
+      transform-origin: right bottom;
+      font-variant-numeric: tabular-nums;
+      display: inline-block;
+    }
+
+    /* Floating Top HUD Controls (Auto-hide after inactivity) */
+    .hud-controls {
+      position: fixed;
+      top: 12px;
+      right: 14px;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+      z-index: 50;
+      opacity: 1;
+      transition: opacity 0.35s ease, transform 0.25s ease;
+    }
+
+    .hud-controls.idle-hidden {
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(-8px);
+    }
+
+    .hud-btn {
+      background: rgba(20, 22, 26, 0.88);
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      color: #ffffff;
+      border-radius: 999px;
+      padding: 7px 13px;
+      font-size: 0.82rem;
+      font-family: -apple-system, BlinkMacSystemFont, 'Pretendard', sans-serif;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6);
+    }
+
+    .hud-btn:hover, .hud-btn:active {
+      background: rgba(40, 44, 52, 0.96);
+      border-color: var(--clock-color);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #00e676;
+      box-shadow: 0 0 6px #00e676;
+    }
+
+    .status-dot.inactive {
+      background: #ffb300;
+      box-shadow: none;
+    }
+
+    /* Toast Notification for Fullscreen / PWA feedback */
+    .toast-banner {
+      position: fixed;
+      bottom: 18px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: rgba(20, 24, 30, 0.95);
+      border: 1px solid var(--clock-color);
+      color: #ffffff;
+      padding: 10px 18px;
+      border-radius: 999px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Pretendard', sans-serif;
+      font-size: 0.85rem;
+      font-weight: 600;
+      z-index: 200;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease, transform 0.25s ease;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.75);
+      text-align: center;
+      max-width: 92vw;
+    }
+
+    .toast-banner.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* Landscape-Optimized Settings Drawer / Modal */
+    /* Uses transparent backdrop on the left so user can see live clock changes while adjusting sliders! */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.25);
+      z-index: 100;
+      display: flex;
+      align-items: stretch;
+      justify-content: flex-end;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.22s ease;
+      font-family: -apple-system, BlinkMacSystemFont, 'Pretendard', 'Malgun Gothic', sans-serif;
+    }
+
+    .modal-backdrop.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .settings-panel {
+      width: min(460px, 92vw);
+      height: 100%;
+      background: rgba(18, 20, 24, 0.94);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-left: 1px solid #2e343d;
+      color: #f1f3f5;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: -12px 0 40px rgba(0, 0, 0, 0.85);
+      transform: translateX(100%);
+      transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .modal-backdrop.open .settings-panel {
+      transform: translateX(0);
+    }
+
+    .settings-header {
+      padding: 12px 18px;
+      border-bottom: 1px solid #262b33;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    .settings-header h2 {
+      font-size: 1.02rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .reset-btn {
+      background: #24282e;
+      border: 1px solid #343a40;
+      color: #ced4da;
+      padding: 5px 10px;
+      border-radius: 8px;
+      font-size: 0.76rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .reset-btn:hover {
+      border-color: #ff6b6b;
+      color: #ff8787;
+    }
+
+    .close-btn {
+      background: #24282e;
+      border: none;
+      color: #adb5bd;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      font-size: 1rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .close-btn:hover {
+      background: #343a40;
+      color: #fff;
+    }
+
+    /* Tab Bar inside Settings for fast navigation in short Landscape height */
+    .settings-tabs {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      background: #101215;
+      border-bottom: 1px solid #262b33;
+      flex-shrink: 0;
+    }
+
+    .tab-btn {
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: #868e96;
+      padding: 10px 4px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+    }
+
+    .tab-btn.active {
+      color: var(--clock-color);
+      border-bottom-color: var(--clock-color);
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .settings-body {
+      padding: 16px 18px 28px 18px;
+      overflow-y: auto;
+      flex: 1 1 auto;
+    }
+
+    .tab-pane {
+      display: none;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .tab-pane.active {
+      display: flex;
+    }
+
+    .setting-card {
+      background: #191c21;
+      border: 1px solid #262b33;
+      border-radius: 12px;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .section-title {
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #66d9e8;
+    }
+
+    .mini-reset-btn {
+      background: none;
+      border: 1px solid #343a40;
+      color: #868e96;
+      border-radius: 6px;
+      padding: 2px 8px;
+      font-size: 0.7rem;
+      cursor: pointer;
+    }
+
+    .mini-reset-btn:hover {
+      color: #fff;
+      border-color: #868e96;
+    }
+
+    /* Color Swatches & Picker */
+    .color-presets {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 9px;
+      align-items: center;
+    }
+
+    .color-swatch {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      cursor: pointer;
+      transition: transform 0.15s ease, border-color 0.15s ease;
+    }
+
+    .color-swatch.active {
+      transform: scale(1.12);
+      border-color: #ffffff;
+      box-shadow: 0 0 10px currentColor;
+    }
+
+    .custom-color-wrap {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #212529;
+      padding: 4px 10px 4px 5px;
+      border-radius: 999px;
+      border: 1px solid #343a40;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+
+    .custom-color-wrap input[type="color"] {
+      -webkit-appearance: none;
+      border: none;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      cursor: pointer;
+      background: none;
+      padding: 0;
+    }
+
+    .custom-color-wrap input[type="color"]::-webkit-color-swatch-wrapper {
+      padding: 0;
+    }
+
+    .custom-color-wrap input[type="color"]::-webkit-color-swatch {
+      border: 1px solid rgba(255,255,255,0.3);
+      border-radius: 50%;
+    }
+
+    /* Form Rows & Sliders */
+    .setting-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.86rem;
+    }
+
+    .setting-label {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .setting-sub {
+      font-size: 0.72rem;
+      color: #868e96;
+    }
+
+    .slider-control {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .val-badge {
+      font-variant-numeric: tabular-nums;
+      font-size: 0.78rem;
+      color: #adb5bd;
+      min-width: 48px;
+      text-align: right;
+    }
+
+    select, input[type="number"], input[type="text"] {
+      background: #212529;
+      border: 1px solid #343a40;
+      color: #f8f9fa;
+      padding: 7px 10px;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      outline: none;
+      max-width: 210px;
+    }
+
+    select:focus, input:focus {
+      border-color: var(--clock-color);
+    }
+
+    input[type="range"] {
+      width: 125px;
+      accent-color: var(--clock-color);
+      cursor: pointer;
+    }
+
+    /* Toggle Switch */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 42px;
+      height: 24px;
+      flex-shrink: 0;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      inset: 0;
+      background-color: #343a40;
+      transition: .22s;
+      border-radius: 24px;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: .22s;
+      border-radius: 50%;
+    }
+
+    input:checked + .slider {
+      background-color: #00b4d8;
+    }
+
+    input:checked + .slider:before {
+      transform: translateX(18px);
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .action-btn {
+      flex: 1;
+      min-width: 120px;
+      background: #212529;
+      border: 1px solid #343a40;
+      color: #f1f3f5;
+      padding: 9px 12px;
+      border-radius: 9px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: center;
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+
+    .action-btn:hover {
+      background: #2b3035;
+      border-color: var(--clock-color);
+    }
+
+    .action-btn.primary {
+      background: #0077b6;
+      border-color: #0096c7;
+      color: #ffffff;
+    }
+
+    .pwa-guide {
+      background: #14171a;
+      border: 1px solid #2b2f36;
+      border-radius: 10px;
+      padding: 11px 13px;
+      font-size: 0.78rem;
+      line-height: 1.55;
+      color: #ced4da;
+    }
+
+    .pwa-guide strong {
+      color: #66d9e8;
+    }
+
+    .pwa-guide ol {
+      padding-left: 16px;
+      margin-top: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Floating HUD Controls (Auto-hides after 3 seconds) -->
+  <div id="hudControls" class="hud-controls">
+    <button id="wakeLockBtn" class="hud-btn" title="상시 화면 켜짐 상태">
+      <span id="wakeDot" class="status-dot"></span>
+      <span id="wakeText">상시 켜짐</span>
+    </button>
+    <button id="rotateBtn" class="hud-btn" title="세로 고정 시 강제 가로 90° 회전">
+      🔄 가로회전
+    </button>
+    <button id="fullscreenBtn" class="hud-btn" title="주소창 숨김 전체화면 (또는 화면 더블탭)">
+      ⛶ 전체화면
+    </button>
+    <button id="openSettingsBtn" class="hud-btn" title="시계 설정 열기">
+      ⚙ 설정
+    </button>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toastBanner" class="toast-banner"></div>
+
+  <!-- Viewport Wrapper (Supports 90deg forced rotation for landscape stand) -->
+  <div id="viewportWrapper" class="viewport-wrapper">
+    <!-- Main Digital Clock Stage -->
+    <main id="clockStage" class="clock-stage" title="화면을 두 번 연속 터치(더블탭)하면 전체화면으로 전환됩니다">
+      <!-- Top: Numeric Year, Month, Day -->
+      <header id="dateDisplay" class="top-date-row">2026. 10. 15</header>
+
+      <!-- Center: 12-Hour Time -->
+      <section class="center-time-row">
+        <div class="time-wrapper">
+          <span id="hourDigits" class="time-digits">10</span>
+          <span id="timeColon" class="time-colon">
+            <span class="colon-dot"></span>
+            <span class="colon-dot"></span>
+          </span>
+          <span id="minuteDigits" class="time-digits">58</span>
+          <span id="ampmBadge" class="ampm-badge hidden">AM</span>
+        </div>
+      </section>
+
+      <!-- Bottom: Left = Day of Week, Right = Weather Icon & Celsius Temp -->
+      <footer class="bottom-info-row">
+        <div id="dayDisplay" class="day-of-week">THU</div>
+        <div id="weatherBox" class="weather-box" title="클릭하여 날씨 새로고침">
+          <span id="weatherIconWrap" class="weather-icon-wrap"></span>
+          <span id="tempDisplay" class="temp-text">24°C</span>
+        </div>
+      </footer>
+    </main>
+  </div>
+
+  <!-- Landscape Side-Drawer Settings Modal (Live Preview Visible on Left) -->
+  <div id="settingsModal" class="modal-backdrop" aria-hidden="true">
+    <div class="settings-panel" role="dialog" aria-labelledby="settingsTitle">
+      <div class="settings-header">
+        <h2 id="settingsTitle">⚙ 디지털 시계 설정</h2>
+        <div class="header-actions">
+          <button id="resetAllBtn" class="reset-btn" title="모든 설정을 기본값으로 초기화">초기화</button>
+          <button id="closeSettingsBtn" class="close-btn" aria-label="닫기">✕</button>
+        </div>
+      </div>
+
+      <!-- 4 Compact Tabs for Landscape Usability -->
+      <nav class="settings-tabs">
+        <button class="tab-btn active" data-tab="tab-layout">상·중·하 크기/자간</button>
+        <button class="tab-btn" data-tab="tab-font">폰트·색상</button>
+        <button class="tab-btn" data-tab="tab-format">형식·날씨</button>
+        <button class="tab-btn" data-tab="tab-pwa">전체화면·PWA</button>
+      </nav>
+
+      <div class="settings-body">
+
+        <!-- TAB 1: Per-Row Size, Letter Spacing (자간), Horizontal Scale (장평) -->
+        <div id="tab-layout" class="tab-pane active">
+          <!-- Top Row Controls -->
+          <div class="setting-card">
+            <div class="card-header">
+              <span class="section-title">① 상단 (년도·월·일 날짜)</span>
+              <button class="mini-reset-btn" data-reset="top">기본값</button>
+            </div>
+            <div class="setting-row">
+              <span>폰트 크기</span>
+              <div class="slider-control">
+                <input type="range" id="topSizeSlider" min="6" max="32" step="0.5" value="16" />
+                <span class="val-badge" id="topSizeVal">16%</span>
+              </div>
+            </div>
+            <div class="setting-row">
+              <span>자간 (글자 간격)</span>
+              <div class="slider-control">
+                <input type="range" id="topTrackingSlider" min="-0.10" max="0.30" step="0.005" value="0.03" />
+                <span class="val-badge" id="topTrackingVal">+0.03em</span>
+              </div>
+            </div>
+            <div class="setting-row">
+              <span>장평 (가로 비율)</span>
+              <div class="slider-control">
+                <input type="range" id="topScaleSlider" min="50" max="150" step="1" value="95" />
+                <span class="val-badge" id="topScaleVal">95%</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Center Row Controls -->
+          <div class="setting-card">
+            <div class="card-header">
+              <span class="section-title">② 중단 (중앙 12시간제 시계)</span>
+              <button class="mini-reset-btn" data-reset="mid">기본값</button>
+            </div>
+            <div class="setting-row">
+              <span>폰트 크기</span>
+              <div class="slider-control">
+                <input type="range" id="midSizeSlider" min="25" max="82" step="1" value="58" />
+                <span class="val-badge" id="midSizeVal">58%</span>
+              </div>
+            </div>
+            <div class="setting-row">
+              <span>자간 (글자 간격)</span>
+              <div class="slider-control">
+                <input type="range" id="midTrackingSlider" min="-0.12" max="0.20" step="0.005" value="-0.015" />
+                <span class="val-badge" id="midTrackingVal">-0.02em</span>
+              </div>
+            </div>
+            <div class="setting-row">
+              <span>장평 (가로 비율)</span>
+              <div class="slider-control">
+                <input type="range" id="midScaleSlider" min="50" max="150" step="1" value="95" />
+                <span class="val-badge" id="midScaleVal">95%</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bottom Row Controls -->
+          <div class="setting-card">
+            <div class="card-header">
+              <span class="section-title">③ 하단 (좌측 요일 · 우측 날씨/온도)</span>
+              <button class="mini-reset-btn" data-reset="bot">기본값</button>
+            </div>
+            <div class="setting-row">
+              <span>폰트 및 아이콘 크기</span>
+              <div class="slider-control">
+                <input type="range" id="botSizeSlider" min="6" max="32" step="0.5" value="18" />
+                <span class="val-badge" id="botSizeVal">18%</span>
+              </div>
+            </div>
+            <div class="setting-row">
+              <span>자간 (글자 간격)</span>
+              <div class="slider-control">
+                <input type="range" id="botTrackingSlider" min="-0.10" max="0.30" step="0.005" value="0.02" />
+                <span class="val-badge" id="botTrackingVal">+0.02em</span>
+              </div>
+            </div>
+            <div class="setting-row">
+              <span>장평 (가로 비율)</span>
+              <div class="slider-control">
+                <input type="range" id="botScaleSlider" min="50" max="150" step="1" value="95" />
+                <span class="val-badge" id="botScaleVal">95%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 2: Font Family, Thickness, Color & Brightness -->
+        <div id="tab-font" class="tab-pane">
+          <div class="setting-card">
+            <span class="section-title">폰트 종류 및 두께 (Thickness)</span>
+            <div class="setting-row">
+              <div class="setting-label">
+                <span>시계 폰트</span>
+                <span class="setting-sub" id="fontDescSub">사진과 가장 흡사한 고밀도 직선형 서체</span>
+              </div>
+              <select id="fontFamilySelect">
+                <option value="barlow">Barlow Condensed (추천·사진 스타일)</option>
+                <option value="oswald">Oswald (강렬한 톨 콘덴스드)</option>
+                <option value="chakra">Chakra Petch (스퀘어 디지털 감성)</option>
+                <option value="rajdhani">Rajdhani (모던 테크 디스플레이)</option>
+                <option value="jetbrains">JetBrains Mono (고정폭·흔들림 제로)</option>
+                <option value="orbitron">Orbitron (미래형 와이드 LED)</option>
+                <option value="inter">Inter / Pretendard (깔끔한 표준 고딕)</option>
+                <option value="nunito">Nunito Rounded (부드러운 라운드형)</option>
+              </select>
+            </div>
+
+            <div class="setting-row">
+              <div class="setting-label">
+                <span>폰트 두께 (Thickness)</span>
+                <span class="setting-sub">단계별 기본 굵기 선택</span>
+              </div>
+              <select id="fontThicknessSelect">
+                <option value="thin">Thin (200 · 아주 얇게)</option>
+                <option value="light">Light (300 · 얇게)</option>
+                <option value="regular">Regular (400 · 보통)</option>
+                <option value="medium">Medium (500 · 중간 굵기)</option>
+                <option value="bold">Bold (700 · 굵게)</option>
+                <option value="extrabold" selected>Extra Bold (800 · 사진 기본)</option>
+                <option value="black">Black (900 · 매우 굵게)</option>
+                <option value="ultra">Ultra Heavy (900+ · 초고밀도)</option>
+              </select>
+            </div>
+
+            <div class="setting-row">
+              <div class="setting-label">
+                <span>두께 미세 보정 (Stroke)</span>
+                <span class="setting-sub" id="strokeValueLabel">기본 (+0.0px)</span>
+              </div>
+              <input type="range" id="strokeSlider" min="-1.5" max="4.0" step="0.5" value="0" />
+            </div>
+          </div>
+
+          <div class="setting-card">
+            <span class="section-title">디스플레이 색상 및 야간 밝기</span>
+            <div class="color-presets" id="colorPresets">
+              <button class="color-swatch active" data-color="#00F0FF" style="background:#00F0FF; color:#00F0FF;" title="시안 (기본 사진 색상)"></button>
+              <button class="color-swatch" data-color="#00FF66" style="background:#00FF66; color:#00FF66;" title="네온 그린"></button>
+              <button class="color-swatch" data-color="#FFB000" style="background:#FFB000; color:#FFB000;" title="앰버 오렌지"></button>
+              <button class="color-swatch" data-color="#FF3333" style="background:#FF3333; color:#FF3333;" title="나이트 레드 (야간 눈부심 방지)"></button>
+              <button class="color-swatch" data-color="#FFFFFF" style="background:#FFFFFF; color:#FFFFFF;" title="퓨어 화이트"></button>
+              <button class="color-swatch" data-color="#C864FF" style="background:#C864FF; color:#C864FF;" title="퍼플"></button>
+              <label class="custom-color-wrap" title="원하는 색상 직접 선택">
+                <input type="color" id="customColorPicker" value="#00F0FF" />
+                <span>직접 선택</span>
+              </label>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label">
+                <span>화면 밝기 (야간 감광)</span>
+              </div>
+              <div class="slider-control">
+                <input type="range" id="brightnessSlider" min="10" max="100" step="5" value="100" />
+                <span class="val-badge" id="brightnessLabel">100%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 3: Time, Date, Day & Weather Formats -->
+        <div id="tab-format" class="tab-pane">
+          <div class="setting-card">
+            <span class="section-title">날짜 · 시간 · 요일 표시 형식</span>
+            <div class="setting-row">
+              <span>상단 날짜 표기 (숫자)</span>
+              <select id="dateFormatSelect">
+                <option value="dot">2026. 04. 17</option>
+                <option value="dash">2026-04-17</option>
+                <option value="slash">2026 / 04 / 17</option>
+                <option value="compact">2026. 4. 17</option>
+                <option value="en_photo">APR 17, 2026 (사진 원본)</option>
+              </select>
+            </div>
+            <div class="setting-row">
+              <span>12시간제 기준 출력</span>
+              <label class="switch">
+                <input type="checkbox" id="use12HourToggle" checked />
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="setting-row">
+              <span>시(Hour) 앞자리 0 채우기 (09:30)</span>
+              <label class="switch">
+                <input type="checkbox" id="padHourToggle" />
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="setting-row">
+              <span>AM / PM 보조 표기</span>
+              <label class="switch">
+                <input type="checkbox" id="showAmPmToggle" />
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="setting-row">
+              <span>콜론(:) 초 단위 깜빡임</span>
+              <label class="switch">
+                <input type="checkbox" id="blinkColonToggle" />
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="setting-row">
+              <span>좌측 하단 요일 표기</span>
+              <select id="dayFormatSelect">
+                <option value="en_short">THU (영문 약어)</option>
+                <option value="ko_short">목 (한글 1자)</option>
+                <option value="ko_full">목요일 (한글 전체)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="setting-card">
+            <span class="section-title">날씨 및 섭씨 온도 (°C)</span>
+            <div class="setting-row">
+              <div class="setting-label">
+                <span>날씨 데이터 모드</span>
+                <span class="setting-sub" id="weatherStatusSub">실시간 자동 연동 (Open-Meteo)</span>
+              </div>
+              <select id="weatherModeSelect">
+                <option value="city">실시간 도시 선택</option>
+                <option value="gps">실시간 현재 위치 (GPS)</option>
+                <option value="manual">수동 고정 입력 (오프라인)</option>
+              </select>
+            </div>
+            <div class="setting-row" id="citySelectRow">
+              <span>기준 도시</span>
+              <select id="citySelect">
+                <option value="36.0190,129.3435">포항 (Pohang)</option>
+                <option value="37.5665,126.9780">서울 (Seoul)</option>
+                <option value="35.1796,129.0756">부산 (Busan)</option>
+                <option value="35.8714,128.6014">대구 (Daegu)</option>
+                <option value="37.4563,126.7052">인천 (Incheon)</option>
+                <option value="35.1595,126.8526">광주 (Gwangju)</option>
+                <option value="36.3504,127.3845">대전 (Daejeon)</option>
+                <option value="35.5384,129.3114">울산 (Ulsan)</option>
+                <option value="33.4996,126.5312">제주 (Jeju)</option>
+              </select>
+            </div>
+            <div class="setting-row" id="manualWeatherRow" style="display:none;">
+              <span>수동 날씨 아이콘</span>
+              <select id="manualWeatherType">
+                <option value="partly_cloudy">구름 조금 (사진 기본)</option>
+                <option value="clear">맑음 (태양)</option>
+                <option value="cloudy">흐림 (구름)</option>
+                <option value="rain">비 (우천)</option>
+                <option value="snow">눈 (강설)</option>
+                <option value="storm">번개 / 뇌우</option>
+              </select>
+            </div>
+            <div class="setting-row" id="manualTempRow" style="display:none;">
+              <span>수동 온도 (°C)</span>
+              <input type="number" id="manualTempInput" value="24" min="-40" max="60" style="width:90px;" />
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 4: Fullscreen, Landscape Rotation & PWA Home Screen Guide -->
+        <div id="tab-pwa" class="tab-pane">
+          <div class="setting-card">
+            <span class="section-title">화면 방향 · 전체화면 · 번인 보호</span>
+            <div class="setting-row">
+              <div class="setting-label">
+                <span>주소창 숨김 전체화면</span>
+                <span class="setting-sub">시계 화면을 두 번 탭(더블탭)해도 전환됩니다</span>
+              </div>
+              <button id="modalFullscreenBtn" class="action-btn primary" style="flex:0 0 auto;">⛶ 전체화면 켜기</button>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label">
+                <span>강제 가로 90° 회전 모드</span>
+                <span class="setting-sub">폰 자동회전이 꺼져 있을 때 화면만 가로로 눕힘</span>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="forceRotateToggle" />
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label">
+                <span>OLED 번인(잔상) 방지</span>
+                <span class="setting-sub">1분마다 화면을 미세하게 이동시켜 화소 보호</span>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="burnInToggle" checked />
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="setting-card">
+            <span class="section-title">📲 바탕화면 아이콘 & 주소창 완전 제거 방법</span>
+            <div class="btn-group">
+              <button id="installPwaBtn" class="action-btn primary" style="display:none;">📲 바탕화면에 앱 설치</button>
+              <button id="downloadPwaFilesBtn" class="action-btn">📦 PWA 호스팅용 파일 받기</button>
+            </div>
+            <div class="pwa-guide">
+              <strong>왜 Chrome 메뉴에 [홈 화면에 추가]가 안 보이나요?</strong><br/>
+              스마트폰에 다운로드한 로컬 파일(<code>file://</code> 또는 <code>content://</code>)을 바로 열면, 모바일 Chrome 보안 정책상 <strong>[홈 화면에 추가]</strong> 메뉴와 일부 전체화면 API가 비활성화됩니다.
+              <ol>
+                <li><strong>가장 깔끔한 해결책 (30초 무료 PWA 배포):</strong> 함께 제공된 <code>digital_clock_pwa_package.zip</code> 압축을 풀어 <strong>Netlify Drop (app.netlify.com/drop)</strong> 또는 GitHub Pages에 올리면 전용 <code>https://</code> 주소가 생성됩니다.</li>
+                <li>그 주소를 공기계 Chrome으로 열면 메뉴에 <strong>[앱 설치 / 홈 화면에 추가]</strong>가 나타나며, 바탕화면 아이콘 실행 시 <strong>상단 주소창이 100% 제거된 가로 전체화면 앱</strong>으로 즉시 작동합니다.</li>
+                <li>로컬 파일 상태에서 바로 쓰실 때에는 시계 배경을 <strong>더블탭(두 번 연속 터치)</strong>하시면 주소창을 가리는 전체화면 모드가 실행됩니다.</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- Font Catalog & Thickness Presets ---
+    const FONT_CATALOG = {
+      barlow: {
+        stack: "'Barlow Condensed', 'Arial Narrow', 'Roboto Condensed', 'Bahnschrift', sans-serif",
+        desc: "사진과 가장 흡사한 고밀도 직선형 콘덴스드 서체"
+      },
+      oswald: {
+        stack: "'Oswald', 'Impact', 'Arial Narrow', sans-serif",
+        desc: "세로로 길고 강렬한 존재감의 대형 시계 서체"
+      },
+      chakra: {
+        stack: "'Chakra Petch', 'Bahnschrift', 'Segoe UI', sans-serif",
+        desc: "모서리가 각진 디지털 기기·계기판 감성 서체"
+      },
+      rajdhani: {
+        stack: "'Rajdhani', 'Bahnschrift', 'DIN Condensed', sans-serif",
+        desc: "넓은 속공간으로 원거리 시인성이 뛰어난 테크 서체"
+      },
+      jetbrains: {
+        stack: "'JetBrains Mono', 'Consolas', 'Courier New', monospace",
+        desc: "모든 숫자의 폭이 100% 동일한 고정폭 모노스페이스"
+      },
+      orbitron: {
+        stack: "'Orbitron', 'Segoe UI', sans-serif",
+        desc: "미래지향적인 SF 탁상 시계 스타일 서체"
+      },
+      inter: {
+        stack: "'Inter', 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif",
+        desc: "스마트폰 UI처럼 가장 깔끔하고 정돈된 표준 산세리프"
+      },
+      nunito: {
+        stack: "'Nunito', 'Arial Rounded MT Bold', -apple-system, sans-serif",
+        desc: "끝이 둥글고 부드러워 침실에 잘 어울리는 라운드 서체"
+      }
+    };
+
+    const THICKNESS_PRESETS = {
+      thin:      { weight: 200, baseStroke: 0 },
+      light:     { weight: 300, baseStroke: 0 },
+      regular:   { weight: 400, baseStroke: 0 },
+      medium:    { weight: 500, baseStroke: 0 },
+      bold:      { weight: 700, baseStroke: 0 },
+      extrabold: { weight: 800, baseStroke: 0.4 },
+      black:     { weight: 900, baseStroke: 1.2 },
+      ultra:     { weight: 900, baseStroke: 2.8 }
+    };
+
+    // --- SVG Weather Icons ---
+    const WEATHER_SVGS = {
+      partly_cloudy: `
+        <svg viewBox="0 0 100 84" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="34" cy="34" r="18" fill="#FFD600" />
+          <path d="M30 74H76C86.5 74 94 66.2 94 56.5C94 47.6 87.3 40.3 78.6 39.2C75.5 27.6 64.9 19 52.2 19C37.6 19 25.6 30.4 24.8 44.8C16.5 46.4 10 53.7 10 62.5C10 69.5 15.5 74 23 74H30Z" stroke="#000000" stroke-width="6" fill="#FFFFFF" stroke-linejoin="round"/>
+        </svg>
+      `,
+      clear: `
+        <svg viewBox="0 0 100 84" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="50" cy="42" r="22" fill="#FFD600" />
+          <g stroke="#FFD600" stroke-width="6" stroke-linecap="round">
+            <line x1="50" y1="8" x2="50" y2="13" />
+            <line x1="50" y1="71" x2="50" y2="76" />
+            <line x1="16" y1="42" x2="21" y2="42" />
+            <line x1="79" y1="42" x2="84" y2="42" />
+            <line x1="26" y1="18" x2="30" y2="22" />
+            <line x1="70" y1="62" x2="74" y2="66" />
+            <line x1="74" y1="18" x2="70" y2="22" />
+            <line x1="30" y1="62" x2="26" y2="66" />
+          </g>
+        </svg>
+      `,
+      cloudy: `
+        <svg viewBox="0 0 100 84" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M36 62H78C86 62 92 56 92 48C92 40.8 86.5 35 79.5 34.2C77 24.8 68.5 18 58.2 18C46.5 18 36.8 27 36.2 38.5C29.5 39.8 24 45.6 24 52.8C24 58.5 28.5 62 36 62Z" fill="#B0BEC5"/>
+          <path d="M24 74H68C78 74 85 66.5 85 57.5C85 49 78.6 42.2 70.3 41.2C67.4 30.2 57.3 22 45.2 22C31.2 22 19.8 32.8 19 46.5C11 48 5 55 5 63.2C5 69.8 10.2 74 17.5 74H24Z" stroke="#000000" stroke-width="5" fill="#FFFFFF"/>
+        </svg>
+      `,
+      rain: `
+        <svg viewBox="0 0 100 84" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M26 60H74C83.5 60 90 53 90 44.5C90 36.5 84 30 76 29C73.2 18.6 63.6 11 52 11C38.8 11 28 21.2 27.2 34C19.5 35.5 14 42 14 49.8C14 56 19 60 26 60Z" fill="#FFFFFF"/>
+          <g stroke="#00B0FF" stroke-width="5.5" stroke-linecap="round">
+            <line x1="34" y1="67" x2="29" y2="79" />
+            <line x1="52" y1="67" x2="47" y2="79" />
+            <line x1="70" y1="67" x2="65" y2="79" />
+          </g>
+        </svg>
+      `,
+      snow: `
+        <svg viewBox="0 0 100 84" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M26 60H74C83.5 60 90 53 90 44.5C90 36.5 84 30 76 29C73.2 18.6 63.6 11 52 11C38.8 11 28 21.2 27.2 34C19.5 35.5 14 42 14 49.8C14 56 19 60 26 60Z" fill="#FFFFFF"/>
+          <g fill="#80D8FF">
+            <circle cx="34" cy="73" r="4.5" />
+            <circle cx="52" cy="75" r="4.5" />
+            <circle cx="70" cy="73" r="4.5" />
+          </g>
+        </svg>
+      `,
+      storm: `
+        <svg viewBox="0 0 100 84" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M26 58H74C83.5 58 90 51 90 42.5C90 34.5 84 28 76 27C73.2 16.6 63.6 9 52 9C38.8 9 28 19.2 27.2 32C19.5 33.5 14 40 14 47.8C14 54 19 58 26 58Z" fill="#ECEFF1"/>
+          <polygon points="54,52 38,69 50,69 45,83 65,64 52,64" fill="#FFD600"/>
+        </svg>
+      `
+    };
+
+    const EN_DAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+    const KO_DAYS_SHORT = ['일', '월', '화', '수', '목', '금', '토'];
+    const KO_DAYS_FULL = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
+    const EN_MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+
+    // Default Configuration (Landscape Optimized + Independent Top/Mid/Bot Typography)
+    const DEFAULT_STATE = {
+      color: '#00F0FF',
+      brightness: 100,
+      fontFamily: 'barlow',
+      fontThickness: 'extrabold',
+      strokeOffset: 0,
+
+      // Top Row (Date)
+      topSize: 16,
+      topTracking: 0.03,
+      topScaleX: 95,
+
+      // Middle Row (Time)
+      midSize: 58,
+      midTracking: -0.015,
+      midScaleX: 95,
+
+      // Bottom Row (Day & Weather/Temp)
+      botSize: 18,
+      botTracking: 0.02,
+      botScaleX: 95,
+
+      dateFormat: 'dot',
+      use12Hour: true,
+      padHour: false,
+      showAmPm: false,
+      blinkColon: false,
+      dayFormat: 'en_short',
+      weatherMode: 'city',
+      cityCoords: '36.0190,129.3435',
+      manualWeather: 'partly_cloudy',
+      manualTemp: 24,
+      burnInProtection: true,
+      forceRotate90: false
+    };
+
+    let state = { ...DEFAULT_STATE };
+    try {
+      const saved = localStorage.getItem('digital_clock_pwa_state_v3');
+      if (saved) {
+        state = { ...DEFAULT_STATE, ...JSON.parse(saved) };
+      }
+    } catch (e) {}
+
+    function saveState() {
+      try {
+        localStorage.setItem('digital_clock_pwa_state_v3', JSON.stringify(state));
+      } catch (e) {}
+    }
+
+    let liveWeather = {
+      type: state.manualWeather || 'partly_cloudy',
+      temp: state.manualTemp ?? 24,
+      lastUpdated: null
+    };
+
+    // DOM References
+    const viewportWrapper = document.getElementById('viewportWrapper');
+    const clockStage = document.getElementById('clockStage');
+    const dateDisplay = document.getElementById('dateDisplay');
+    const hourDigits = document.getElementById('hourDigits');
+    const minuteDigits = document.getElementById('minuteDigits');
+    const timeColon = document.getElementById('timeColon');
+    const ampmBadge = document.getElementById('ampmBadge');
+    const dayDisplay = document.getElementById('dayDisplay');
+    const weatherIconWrap = document.getElementById('weatherIconWrap');
+    const tempDisplay = document.getElementById('tempDisplay');
+    const weatherBox = document.getElementById('weatherBox');
+    const toastBanner = document.getElementById('toastBanner');
+
+    const hudControls = document.getElementById('hudControls');
+    const openSettingsBtn = document.getElementById('openSettingsBtn');
+    const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+    const resetAllBtn = document.getElementById('resetAllBtn');
+    const settingsModal = document.getElementById('settingsModal');
+    const fullscreenBtn = document.getElementById('fullscreenBtn');
+    const modalFullscreenBtn = document.getElementById('modalFullscreenBtn');
+    const rotateBtn = document.getElementById('rotateBtn');
+    const forceRotateToggle = document.getElementById('forceRotateToggle');
+    const wakeLockBtn = document.getElementById('wakeLockBtn');
+    const wakeDot = document.getElementById('wakeDot');
+    const wakeText = document.getElementById('wakeText');
+
+    // Per-section Sliders
+    const topSizeSlider = document.getElementById('topSizeSlider');
+    const topSizeVal = document.getElementById('topSizeVal');
+    const topTrackingSlider = document.getElementById('topTrackingSlider');
+    const topTrackingVal = document.getElementById('topTrackingVal');
+    const topScaleSlider = document.getElementById('topScaleSlider');
+    const topScaleVal = document.getElementById('topScaleVal');
+
+    const midSizeSlider = document.getElementById('midSizeSlider');
+    const midSizeVal = document.getElementById('midSizeVal');
+    const midTrackingSlider = document.getElementById('midTrackingSlider');
+    const midTrackingVal = document.getElementById('midTrackingVal');
+    const midScaleSlider = document.getElementById('midScaleSlider');
+    const midScaleVal = document.getElementById('midScaleVal');
+
+    const botSizeSlider = document.getElementById('botSizeSlider');
+    const botSizeVal = document.getElementById('botSizeVal');
+    const botTrackingSlider = document.getElementById('botTrackingSlider');
+    const botTrackingVal = document.getElementById('botTrackingVal');
+    const botScaleSlider = document.getElementById('botScaleSlider');
+    const botScaleVal = document.getElementById('botScaleVal');
+
+    // Font & Color Controls
+    const colorPresets = document.getElementById('colorPresets');
+    const customColorPicker = document.getElementById('customColorPicker');
+    const brightnessSlider = document.getElementById('brightnessSlider');
+    const brightnessLabel = document.getElementById('brightnessLabel');
+    const fontFamilySelect = document.getElementById('fontFamilySelect');
+    const fontDescSub = document.getElementById('fontDescSub');
+    const fontThicknessSelect = document.getElementById('fontThicknessSelect');
+    const strokeSlider = document.getElementById('strokeSlider');
+    const strokeValueLabel = document.getElementById('strokeValueLabel');
+
+    // Format & Weather Controls
+    const dateFormatSelect = document.getElementById('dateFormatSelect');
+    const use12HourToggle = document.getElementById('use12HourToggle');
+    const padHourToggle = document.getElementById('padHourToggle');
+    const showAmPmToggle = document.getElementById('showAmPmToggle');
+    const blinkColonToggle = document.getElementById('blinkColonToggle');
+    const dayFormatSelect = document.getElementById('dayFormatSelect');
+    const weatherModeSelect = document.getElementById('weatherModeSelect');
+    const citySelectRow = document.getElementById('citySelectRow');
+    const citySelect = document.getElementById('citySelect');
+    const manualWeatherRow = document.getElementById('manualWeatherRow');
+    const manualTempRow = document.getElementById('manualTempRow');
+    const manualWeatherType = document.getElementById('manualWeatherType');
+    const manualTempInput = document.getElementById('manualTempInput');
+    const weatherStatusSub = document.getElementById('weatherStatusSub');
+    const burnInToggle = document.getElementById('burnInToggle');
+    const downloadPwaFilesBtn = document.getElementById('downloadPwaFilesBtn');
+    const installPwaBtn = document.getElementById('installPwaBtn');
+
+    let toastTimer = null;
+    function showToast(msg, duration = 3500) {
+      toastBanner.textContent = msg;
+      toastBanner.classList.add('show');
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        toastBanner.classList.remove('show');
+      }, duration);
+    }
+
+    // --- Apply Visual & Per-Row Typography Settings ---
+    function applyVisualSettings() {
+      const root = document.documentElement.style;
+      root.setProperty('--clock-color', state.color);
+      root.setProperty('--clock-brightness', (state.brightness / 100).toFixed(2));
+      customColorPicker.value = state.color;
+      brightnessSlider.value = state.brightness;
+      brightnessLabel.textContent = `${state.brightness}%`;
+
+      document.querySelectorAll('.color-swatch').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.color.toLowerCase() === state.color.toLowerCase());
+      });
+
+      // Font Family & Thickness
+      const fontMeta = FONT_CATALOG[state.fontFamily] || FONT_CATALOG.barlow;
+      root.setProperty('--font-stack', fontMeta.stack);
+      fontFamilySelect.value = state.fontFamily;
+      fontDescSub.textContent = fontMeta.desc;
+
+      const thickMeta = THICKNESS_PRESETS[state.fontThickness] || THICKNESS_PRESETS.extrabold;
+      const totalStroke = Math.max(0, thickMeta.baseStroke + Number(state.strokeOffset || 0));
+      root.setProperty('--clock-weight', String(thickMeta.weight));
+      root.setProperty('--clock-stroke', `${totalStroke.toFixed(1)}px`);
+
+      fontThicknessSelect.value = state.fontThickness;
+      strokeSlider.value = state.strokeOffset;
+      const offsetNum = Number(state.strokeOffset || 0);
+      strokeValueLabel.textContent = `${offsetNum >= 0 ? '+' : ''}${offsetNum.toFixed(1)}px (최종 외곽선 ${totalStroke.toFixed(1)}px)`;
+
+      // 1. Top Row (Date) Size, Tracking, ScaleX
+      root.setProperty('--top-size', String(state.topSize));
+      root.setProperty('--top-tracking', `${state.topTracking}em`);
+      root.setProperty('--top-scale-x', (state.topScaleX / 100).toFixed(2));
+      topSizeSlider.value = state.topSize;
+      topSizeVal.textContent = `${state.topSize}%`;
+      topTrackingSlider.value = state.topTracking;
+      topTrackingVal.textContent = `${state.topTracking >= 0 ? '+' : ''}${Number(state.topTracking).toFixed(2)}em`;
+      topScaleSlider.value = state.topScaleX;
+      topScaleVal.textContent = `${state.topScaleX}%`;
+
+      // 2. Center Row (Time) Size, Tracking, ScaleX
+      root.setProperty('--mid-size', String(state.midSize));
+      root.setProperty('--mid-tracking', `${state.midTracking}em`);
+      root.setProperty('--mid-scale-x', (state.midScaleX / 100).toFixed(2));
+      midSizeSlider.value = state.midSize;
+      midSizeVal.textContent = `${state.midSize}%`;
+      midTrackingSlider.value = state.midTracking;
+      midTrackingVal.textContent = `${state.midTracking >= 0 ? '+' : ''}${Number(state.midTracking).toFixed(2)}em`;
+      midScaleSlider.value = state.midScaleX;
+      midScaleVal.textContent = `${state.midScaleX}%`;
+
+      // 3. Bottom Row (Day & Weather/Temp) Size, Tracking, ScaleX
+      root.setProperty('--bot-size', String(state.botSize));
+      root.setProperty('--bot-tracking', `${state.botTracking}em`);
+      root.setProperty('--bot-scale-x', (state.botScaleX / 100).toFixed(2));
+      botSizeSlider.value = state.botSize;
+      botSizeVal.textContent = `${state.botSize}%`;
+      botTrackingSlider.value = state.botTracking;
+      botTrackingVal.textContent = `${state.botTracking >= 0 ? '+' : ''}${Number(state.botTracking).toFixed(2)}em`;
+      botScaleSlider.value = state.botScaleX;
+      botScaleVal.textContent = `${state.botScaleX}%`;
+
+      // Rotation
+      viewportWrapper.classList.toggle('force-rotate-90', Boolean(state.forceRotate90));
+      forceRotateToggle.checked = Boolean(state.forceRotate90);
+
+      // Formats
+      dateFormatSelect.value = state.dateFormat;
+      use12HourToggle.checked = state.use12Hour;
+      padHourToggle.checked = state.padHour;
+      showAmPmToggle.checked = state.showAmPm;
+      blinkColonToggle.checked = state.blinkColon;
+      dayFormatSelect.value = state.dayFormat;
+      weatherModeSelect.value = state.weatherMode;
+      citySelect.value = state.cityCoords;
+      manualWeatherType.value = state.manualWeather;
+      manualTempInput.value = state.manualTemp;
+      burnInToggle.checked = state.burnInProtection;
+
+      citySelectRow.style.display = state.weatherMode === 'city' ? 'flex' : 'none';
+      manualWeatherRow.style.display = state.weatherMode === 'manual' ? 'flex' : 'none';
+      manualTempRow.style.display = state.weatherMode === 'manual' ? 'flex' : 'none';
+    }
+
+    // --- Update Clock Function ---
+    function updateClock() {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth() + 1;
+      const date = now.getDate();
+      const dayIdx = now.getDay();
+
+      const mm = String(month).padStart(2, '0');
+      const dd = String(date).padStart(2, '0');
+
+      if (state.dateFormat === 'dot') {
+        dateDisplay.textContent = `${year}. ${mm}. ${dd}`;
+      } else if (state.dateFormat === 'dash') {
+        dateDisplay.textContent = `${year}-${mm}-${dd}`;
+      } else if (state.dateFormat === 'slash') {
+        dateDisplay.textContent = `${year} / ${mm} / ${dd}`;
+      } else if (state.dateFormat === 'compact') {
+        dateDisplay.textContent = `${year}. ${month}. ${date}`;
+      } else if (state.dateFormat === 'en_photo') {
+        dateDisplay.textContent = `${EN_MONTHS[month - 1]} ${date}, ${year}`;
+      }
+
+      let hours = now.getHours();
+      const minutes = now.getMinutes();
+      const seconds = now.getSeconds();
+      const isPm = hours >= 12;
+
+      if (state.use12Hour) {
+        hours = hours % 12;
+        if (hours === 0) hours = 12;
+      }
+
+      hourDigits.textContent = state.padHour ? String(hours).padStart(2, '0') : String(hours);
+      minuteDigits.textContent = String(minutes).padStart(2, '0');
+
+      if (state.showAmPm && state.use12Hour) {
+        ampmBadge.textContent = isPm ? 'PM' : 'AM';
+        ampmBadge.classList.remove('hidden');
+      } else {
+        ampmBadge.classList.add('hidden');
+      }
+
+      if (state.blinkColon) {
+        timeColon.classList.toggle('blink-hidden', seconds % 2 === 1);
+      } else {
+        timeColon.classList.remove('blink-hidden');
+      }
+
+      if (state.dayFormat === 'en_short') {
+        dayDisplay.textContent = EN_DAYS[dayIdx];
+      } else if (state.dayFormat === 'ko_short') {
+        dayDisplay.textContent = KO_DAYS_SHORT[dayIdx];
+      } else {
+        dayDisplay.textContent = KO_DAYS_FULL[dayIdx];
+      }
+
+      if (state.burnInProtection) {
+        const shiftX = ((minutes % 5) - 2) * 2;
+        const shiftY = ((Math.floor(minutes / 5) % 5) - 2) * 2;
+        clockStage.style.transform = `translate(${shiftX}px, ${shiftY}px)`;
+      } else {
+        clockStage.style.transform = 'translate(0, 0)';
+      }
+    }
+
+    // --- Weather Rendering & Open-Meteo Live Fetch ---
+    function mapWmoCodeToIcon(code) {
+      if (code === 0) return 'clear';
+      if (code === 1 || code === 2) return 'partly_cloudy';
+      if (code === 3 || code === 45 || code === 48) return 'cloudy';
+      if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) return 'rain';
+      if ((code >= 71 && code <= 77) || code === 85 || code === 86) return 'snow';
+      if (code >= 95) return 'storm';
+      return 'partly_cloudy';
+    }
+
+    function renderWeather() {
+      const iconType = state.weatherMode === 'manual' ? state.manualWeather : liveWeather.type;
+      const tempVal = state.weatherMode === 'manual' ? state.manualTemp : liveWeather.temp;
+      weatherIconWrap.innerHTML = WEATHER_SVGS[iconType] || WEATHER_SVGS.partly_cloudy;
+      tempDisplay.textContent = `${Math.round(tempVal)}°C`;
+    }
+
+    async function fetchWeatherByCoords(lat, lon, label) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      try {
+        weatherStatusSub.textContent = '날씨 정보 업데이트 중...';
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&timezone=auto`;
+        const res = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeoutId);
+        if (!res.ok) throw new Error('Network error');
+        const data = await res.json();
+        if (data && data.current) {
+          liveWeather.temp = Math.round(data.current.temperature_2m);
+          liveWeather.type = mapWmoCodeToIcon(data.current.weather_code);
+          liveWeather.lastUpdated = new Date();
+          const timeStr = liveWeather.lastUpdated.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+          weatherStatusSub.textContent = `${label} 기준 (${timeStr} 갱신됨)`;
+          renderWeather();
+        }
+      } catch (err) {
+        clearTimeout(timeoutId);
+        weatherStatusSub.textContent = '오프라인 또는 연결 불가 (기본/최근 값 표시 중)';
+        renderWeather();
+      }
+    }
+
+    function refreshWeather() {
+      if (state.weatherMode === 'manual') {
+        weatherStatusSub.textContent = '수동 고정 온도 및 아이콘 사용 중';
+        renderWeather();
+        return;
+      }
+      if (state.weatherMode === 'gps' && 'geolocation' in navigator) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            fetchWeatherByCoords(pos.coords.latitude.toFixed(4), pos.coords.longitude.toFixed(4), 'GPS 현재 위치');
+          },
+          () => {
+            const [lat, lon] = state.cityCoords.split(',');
+            fetchWeatherByCoords(lat, lon, '선택 도시(GPS 대체)');
+          },
+          { timeout: 5000 }
+        );
+      } else {
+        const [lat, lon] = state.cityCoords.split(',');
+        const cityName = citySelect.options[citySelect.selectedIndex]?.text.split(' ')[0] || '선택 도시';
+        fetchWeatherByCoords(lat, lon, cityName);
+      }
+    }
+
+    // --- Screen Wake Lock API ---
+    let wakeLockSentinel = null;
+    async function requestWakeLock() {
+      if ('wakeLock' in navigator) {
+        try {
+          wakeLockSentinel = await navigator.wakeLock.request('screen');
+          wakeDot.classList.remove('inactive');
+          wakeText.textContent = '상시 켜짐';
+          wakeLockSentinel.addEventListener('release', () => {
+            wakeDot.classList.add('inactive');
+            wakeText.textContent = '절전 대기';
+          });
+        } catch (err) {
+          wakeDot.classList.add('inactive');
+          wakeText.textContent = '터치 시 켜짐';
+        }
+      } else {
+        wakeDot.classList.add('inactive');
+        wakeText.textContent = '화면켜짐 유지 권장';
+      }
+    }
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') requestWakeLock();
+    });
+    wakeLockBtn.addEventListener('click', requestWakeLock);
+
+    // --- Auto-Hide HUD Controls After 3 Seconds ---
+    let hudTimer = null;
+    function showHudTemporarily() {
+      hudControls.classList.remove('idle-hidden');
+      if (hudTimer) clearTimeout(hudTimer);
+      if (!settingsModal.classList.contains('open')) {
+        hudTimer = setTimeout(() => {
+          hudControls.classList.add('idle-hidden');
+        }, 3200);
+      }
+    }
+
+    document.addEventListener('pointerdown', () => {
+      showHudTemporarily();
+      if (!wakeLockSentinel) requestWakeLock();
+    });
+    document.addEventListener('mousemove', showHudTemporarily);
+
+    // --- Robust Cross-Browser Fullscreen + Landscape Orientation Lock ---
+    function getFullscreenElement() {
+      return document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement;
+    }
+
+    async function toggleFullscreen() {
+      const docEl = document.documentElement;
+      try {
+        if (!getFullscreenElement()) {
+          if (docEl.requestFullscreen) {
+            await docEl.requestFullscreen({ navigationUI: 'hide' });
+          } else if (docEl.webkitRequestFullscreen) {
+            docEl.webkitRequestFullscreen();
+          } else if (docEl.msRequestFullscreen) {
+            docEl.msRequestFullscreen();
+          } else {
+            throw new Error('Fullscreen API unavailable');
+          }
+          // Try locking to landscape if supported by mobile browser
+          if (screen.orientation && screen.orientation.lock) {
+            screen.orientation.lock('landscape').catch(() => {});
+          }
+          showToast('전체화면 모드로 전환되었습니다 (종료: 두 번 탭 또는 ESC)');
+        } else {
+          if (document.exitFullscreen) {
+            await document.exitFullscreen();
+          } else if (document.webkitExitFullscreen) {
+            document.webkitExitFullscreen();
+          } else if (document.msExitFullscreen) {
+            document.msExitFullscreen();
+          }
+        }
+      } catch (err) {
+        showToast('현재 뷰어(로컬 파일/미리보기 창)에서 전체화면이 제한됩니다. Chrome 브라우저 또는 PWA 앱으로 열어주세요.');
+      }
+    }
+
+    function updateFullscreenButtonLabels() {
+      const isFs = Boolean(getFullscreenElement());
+      fullscreenBtn.textContent = isFs ? '⛶ 전체화면 종료' : '⛶ 전체화면';
+      modalFullscreenBtn.textContent = isFs ? '⛶ 전체화면 종료' : '⛶ 전체화면 켜기';
+    }
+
+    document.addEventListener('fullscreenchange', updateFullscreenButtonLabels);
+    document.addEventListener('webkitfullscreenchange', updateFullscreenButtonLabels);
+    fullscreenBtn.addEventListener('click', toggleFullscreen);
+    modalFullscreenBtn.addEventListener('click', toggleFullscreen);
+
+    // Double-tap anywhere on clock stage to toggle Fullscreen!
+    let lastTapTime = 0;
+    clockStage.addEventListener('pointerup', (e) => {
+      if (e.target.closest('#weatherBox')) return;
+      const now = Date.now();
+      if (now - lastTapTime < 320) {
+        toggleFullscreen();
+        lastTapTime = 0;
+      } else {
+        lastTapTime = now;
+      }
+    });
+
+    // Forced 90-degree rotation button & toggle
+    rotateBtn.addEventListener('click', () => {
+      state.forceRotate90 = !state.forceRotate90;
+      saveState();
+      applyVisualSettings();
+      showToast(state.forceRotate90 ? '강제 가로 90° 회전이 켜졌습니다' : '기본 화면 방향으로 복귀했습니다');
+    });
+
+    forceRotateToggle.addEventListener('change', (e) => {
+      state.forceRotate90 = e.target.checked;
+      saveState();
+      applyVisualSettings();
+    });
+
+    // --- Settings Drawer & Tabs ---
+    openSettingsBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      settingsModal.classList.add('open');
+      settingsModal.setAttribute('aria-hidden', 'false');
+      if (hudTimer) clearTimeout(hudTimer);
+    });
+
+    function closeSettings() {
+      settingsModal.classList.remove('open');
+      settingsModal.setAttribute('aria-hidden', 'true');
+      showHudTemporarily();
+    }
+
+    closeSettingsBtn.addEventListener('click', closeSettings);
+    settingsModal.addEventListener('click', (e) => {
+      if (e.target === settingsModal) closeSettings();
+    });
+
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById(btn.dataset.tab).classList.add('active');
+      });
+    });
+
+    // Per-section Sliders Event Binding
+    topSizeSlider.addEventListener('input', (e) => { state.topSize = Number(e.target.value); saveState(); applyVisualSettings(); });
+    topTrackingSlider.addEventListener('input', (e) => { state.topTracking = Number(e.target.value); saveState(); applyVisualSettings(); });
+    topScaleSlider.addEventListener('input', (e) => { state.topScaleX = Number(e.target.value); saveState(); applyVisualSettings(); });
+
+    midSizeSlider.addEventListener('input', (e) => { state.midSize = Number(e.target.value); saveState(); applyVisualSettings(); });
+    midTrackingSlider.addEventListener('input', (e) => { state.midTracking = Number(e.target.value); saveState(); applyVisualSettings(); });
+    midScaleSlider.addEventListener('input', (e) => { state.midScaleX = Number(e.target.value); saveState(); applyVisualSettings(); });
+
+    botSizeSlider.addEventListener('input', (e) => { state.botSize = Number(e.target.value); saveState(); applyVisualSettings(); });
+    botTrackingSlider.addEventListener('input', (e) => { state.botTracking = Number(e.target.value); saveState(); applyVisualSettings(); });
+    botScaleSlider.addEventListener('input', (e) => { state.botScaleX = Number(e.target.value); saveState(); applyVisualSettings(); });
+
+    // Section Reset & Full Reset
+    document.querySelectorAll('.mini-reset-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const target = btn.dataset.reset;
+        if (target === 'top') {
+          state.topSize = DEFAULT_STATE.topSize;
+          state.topTracking = DEFAULT_STATE.topTracking;
+          state.topScaleX = DEFAULT_STATE.topScaleX;
+        } else if (target === 'mid') {
+          state.midSize = DEFAULT_STATE.midSize;
+          state.midTracking = DEFAULT_STATE.midTracking;
+          state.midScaleX = DEFAULT_STATE.midScaleX;
+        } else if (target === 'bot') {
+          state.botSize = DEFAULT_STATE.botSize;
+          state.botTracking = DEFAULT_STATE.botTracking;
+          state.botScaleX = DEFAULT_STATE.botScaleX;
+        }
+        saveState();
+        applyVisualSettings();
+      });
+    });
+
+    resetAllBtn.addEventListener('click', () => {
+      state = { ...DEFAULT_STATE };
+      saveState();
+      applyVisualSettings();
+      updateClock();
+      renderWeather();
+      showToast('모든 설정이 초기 기본값으로 복원되었습니다');
+    });
+
+    weatherBox.addEventListener('click', refreshWeather);
+
+    // Color & Brightness Listeners
+    colorPresets.addEventListener('click', (e) => {
+      const swatch = e.target.closest('.color-swatch');
+      if (!swatch) return;
+      state.color = swatch.dataset.color;
+      saveState();
+      applyVisualSettings();
+    });
+
+    customColorPicker.addEventListener('input', (e) => { state.color = e.target.value; saveState(); applyVisualSettings(); });
+    brightnessSlider.addEventListener('input', (e) => { state.brightness = Number(e.target.value); saveState(); applyVisualSettings(); });
+
+    // Typography Listeners
+    fontFamilySelect.addEventListener('change', (e) => { state.fontFamily = e.target.value; saveState(); applyVisualSettings(); });
+    fontThicknessSelect.addEventListener('change', (e) => { state.fontThickness = e.target.value; saveState(); applyVisualSettings(); });
+    strokeSlider.addEventListener('input', (e) => { state.strokeOffset = Number(e.target.value); saveState(); applyVisualSettings(); });
+
+    // Format Listeners
+    dateFormatSelect.addEventListener('change', (e) => { state.dateFormat = e.target.value; saveState(); updateClock(); });
+    use12HourToggle.addEventListener('change', (e) => { state.use12Hour = e.target.checked; saveState(); updateClock(); });
+    padHourToggle.addEventListener('change', (e) => { state.padHour = e.target.checked; saveState(); updateClock(); });
+    showAmPmToggle.addEventListener('change', (e) => { state.showAmPm = e.target.checked; saveState(); updateClock(); });
+    blinkColonToggle.addEventListener('change', (e) => { state.blinkColon = e.target.checked; saveState(); updateClock(); });
+    dayFormatSelect.addEventListener('change', (e) => { state.dayFormat = e.target.value; saveState(); updateClock(); });
+    weatherModeSelect.addEventListener('change', (e) => { state.weatherMode = e.target.value; saveState(); applyVisualSettings(); refreshWeather(); });
+    citySelect.addEventListener('change', (e) => { state.cityCoords = e.target.value; saveState(); refreshWeather(); });
+    manualWeatherType.addEventListener('change', (e) => { state.manualWeather = e.target.value; saveState(); renderWeather(); });
+    manualTempInput.addEventListener('input', (e) => { state.manualTemp = Number(e.target.value || 0); saveState(); renderWeather(); });
+    burnInToggle.addEventListener('change', (e) => { state.burnInProtection = e.target.checked; saveState(); updateClock(); });
+
+    // --- PWA Setup ---
+    function generateClockIconDataUrl(size = 512) {
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(0, 0, size, size);
+      ctx.strokeStyle = '#00F0FF';
+      ctx.lineWidth = size * 0.03;
+      ctx.strokeRect(size * 0.04, size * 0.04, size * 0.92, size * 0.92);
+      ctx.fillStyle = '#00F0FF';
+      ctx.font = `900 ${Math.round(size * 0.32)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('10:58', size / 2, size * 0.48);
+      ctx.font = `bold ${Math.round(size * 0.12)}px sans-serif`;
+      ctx.fillText('THU   24°C', size / 2, size * 0.78);
+      return canvas.toDataURL('image/png');
+    }
+
+    const icon192 = generateClockIconDataUrl(192);
+    const icon512 = generateClockIconDataUrl(512);
+    const dynamicAppleIcon = document.getElementById('dynamic-apple-icon');
+    if (dynamicAppleIcon) dynamicAppleIcon.href = icon192;
+
+    const manifestObj = {
+      name: '상시 출력 디지털 시계 (Always-On Clock)',
+      short_name: '디지털 시계',
+      description: '날짜, 12시간제 시각, 요일, 실시간 날씨 및 섭씨 온도를 표시하는 가로 모드 최적화 PWA 디지털 시계',
+      start_url: './index.html',
+      scope: './',
+      display: 'fullscreen',
+      orientation: 'landscape',
+      background_color: '#000000',
+      theme_color: '#000000',
+      icons: [
+        { src: 'icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
+        { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' }
+      ]
+    };
+
+    const dynamicManifestEl = document.getElementById('dynamic-manifest');
+    if (dynamicManifestEl) {
+      const inlineManifest = {
+        ...manifestObj,
+        start_url: './digital_clock_pwa.html',
+        icons: [
+          { src: icon192, sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
+          { src: icon512, sizes: '512x512', type: 'image/png', purpose: 'any maskable' }
+        ]
+      };
+      const manifestBlob = new Blob([JSON.stringify(inlineManifest, null, 2)], { type: 'application/manifest+json' });
+      dynamicManifestEl.href = URL.createObjectURL(manifestBlob);
+    }
+
+    const swCode = `const CACHE_NAME = 'digital-clock-pwa-v3';
+const ASSETS = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS)).then(() => self.skipWaiting())
+  );
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))).then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener('fetch', (event) => {
+  event.respondWith(
+    fetch(event.request).catch(() => caches.match(event.request))
+  );
+});
+`;
+
+    if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
+      navigator.serviceWorker.register('./sw.js').catch(() => {});
+    }
+
+    let deferredPrompt = null;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      installPwaBtn.style.display = 'inline-block';
+    });
+
+    installPwaBtn.addEventListener('click', async () => {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+      deferredPrompt = null;
+      installPwaBtn.style.display = 'none';
+    });
+
+    downloadPwaFilesBtn.addEventListener('click', () => {
+      const downloadFile = (filename, content, type) => {
+        const blob = new Blob([content], { type });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = filename;
+        a.click();
+      };
+      downloadFile('manifest.json', JSON.stringify(manifestObj, null, 2), 'application/json');
+      setTimeout(() => {
+        downloadFile('sw.js', swCode, 'application/javascript');
+      }, 300);
+    });
+
+    // --- Initialize App ---
+    applyVisualSettings();
+    updateClock();
+    renderWeather();
+    refreshWeather();
+    requestWakeLock();
+    showHudTemporarily();
+
+    setInterval(updateClock, 1000);
+    setInterval(refreshWeather, 15 * 60 * 1000);
+  </script>
+</body>
+</html>
